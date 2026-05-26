@@ -217,7 +217,7 @@ async function berechtigungFuerPushAnfordern() {
             
             // Hol das Token mit deinem VAPID-Schlüssel
             const token = await getToken(messaging, { 
-                vapidKey: "HIER_DEINEN_LANGEN_VAPID_SCHLÜSSEL_EINFÜGEN", 
+                vapidKey: "BJaHk8YgFDxUQ44zQkywM8uXp2GzWUWoc81ovY7GhAs8UVd5qbqA90xQYaw93pHuj68ZrY8AFrQUWMB3a_cMj9k", 
                 serviceWorkerRegistration: registration 
             });
             
