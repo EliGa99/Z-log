@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mamas Diabetes Tagebuch</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --secondary: #2ecc71;
+            --background: #f0f4f8;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-light: #7f8c8d;
+            --accent: #e74c3c;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 450px;
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .menu-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: var(--text);
+            z-index: 10;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: -280px;
+            width: 280px;
+            height: 100%;
+            background-color: var(--card-bg);
+            box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+            transition: left 0.3s ease;
+            z-index: 100;
+            padding: 30px 20px;
+            box-sizing: border-box;
+        }
+
+        .sidebar.open { left: 0; }
+        .sidebar h3 { margin-top: 20px; border-bottom: 2px solid var(--background); padding-bottom: 10px; }
+        .sidebar a { display: block; padding: 12px 10px; color: var(--text); text-decoration: none; font-weight: 600; border-radius: 8px; margin-bottom: 5px; cursor: pointer; }
+        .sidebar a:hover { background-color: var(--background); color: var(--primary); }
+        .close-btn { text-align: right; font-size: 1.5rem; cursor: pointer; font-weight: bold; color: var(--text-light); }
+
+        /* Uhr & Countdown */
+        .clock-section {
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 25px;
+            padding: 20px 15px;
+            background: linear-gradient(135deg, #e0eafc, #cfdef3);
+            border-radius: 16px;
+        }
+
+        #live-clock { font-size: 3rem; font-weight: 700; color: var(--primary); margin: 0; letter-spacing: 2px; line-height: 1; }
+        #live-date { margin: 5px 0 10px 0; font-size: 0.9rem; color: var(--text-light); font-weight: 600; text-transform: uppercase; }
+        .countdown-badge { background-color: var(--card-bg); padding: 8px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: 600; display: inline-block; color: var(--accent); box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-top: 5px; }
+
+        h1, h2 { font-size: 1.4rem; text-align: center; margin-bottom: 20px; font-weight: 700; }
+
+        /* Seiten umschalten */
+        .app-page { display: none; }
+        .app-page.active { display: block; }
+
+        /* Formular & Inputs */
+        .input-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600; }
+        input[type="number"], input[type="time"] {
+            width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 14px;
+            font-size: 1rem; font-family: inherit; outline: none; box-sizing: border-box; background-color: #f8fafc;
+        }
+        input:focus { border-color: var(--primary); background-color: #fff; }
+
+        /* Checkboxen für Einstellungen */
+        .checkbox-group { display: flex; align-items: center; margin-bottom: 12px; }
+        .checkbox-group input { width: 20px; height: 20px; margin-right: 12px; cursor: pointer; }
+
+        button {
+            width: 100%; padding: 16px; background-color: var(--secondary); color: white;
+            border: none; border-radius: 14px; font-size: 1.1rem; font-weight: 600; cursor: pointer;
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2); margin-top: 10px;
+        }
+        button:hover { background-color: #27ae60; }
+        .btn-primary { background-color: var(--primary); box-shadow: 0 5px 15px rgba(74, 144, 226, 0.2); }
+        .btn-primary:hover { background-color: #357abd; }
+
+        hr { border: 0; height: 1px; background: #e2e8f0; margin: 25px 0; }
+
+        /* Tabelle & Alarm-Kennzeichnungen */
+        .table-container { max-height: 200px; overflow-y: auto; border-radius: 12px; border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        th, td { padding: 12px 14px; text-align: left; }
+        th { background-color: #f8fafc; color: var(--text-light); position: sticky; top: 0; border-bottom: 1px solid #e2e8f0; }
+        tr { border-bottom: 1px solid #f1f5f9; }
+        .badge-insulin { background-color: rgba(74, 144, 226, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 8px; font-weight: 600; }
+        
+        /* Blutzucker-Farbcodes im Log */
+        .bg-normal { font-weight: 600; color: var(--secondary); }
+        .bg-hoch { background-color: rgba(231, 76, 60, 0.1); color: var(--accent); padding: 4px 8px; border-radius: 8px; font-weight: 700; display: inline-block; }
+        .bg-niedrig { background-color: rgba(241, 196, 15, 0.15); color: #d35400; padding: 4px 8px; border-radius: 8px; font-weight: 700; display: inline-block; }
+
+        /* Statistik Boxen */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: #f8fafc; padding: 15px; border-radius: 14px; text-align: center; border: 1px solid #e2e8f0; }
+        .stat-card .num { font-size: 1.6rem; font-weight: 700; color: var(--primary); }
+        .stat-card .label { font-size: 0.8rem; color: var(--text-light); font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+    <div class="close-btn" id="closeMenuBtn">&times;</div>
+    <h3>Menü</h3>
+    <a id="navLogbuch">✍️ Tagebuch</a>
+    <a id="navStatistik">📊 Statistiken</a>
+    <a id="navEinstellungen">⚙️ Einstellungen</a>
+</div>
+
+<div class="app-container">
+    <button class="menu-btn" id="openMenuBtn">☰</button>
+
+    <div class="clock-section">
+        <div id="live-clock">00:00:00</div>
+        <div id="live-date">Lade Datum...</div>
+        <div class="countdown-badge" id="countdown-text">Berechne Zeit...</div>
+    </div>
+
+    <div id="pageLogbuch" class="app-page active">
+        <h1>Neuer Eintrag</h1>
+        <div class="input-group">
+            <label for="blutzucker">Aktueller Blutzucker</label>
+            <input type="number" id="blutzucker" inputmode="numeric" placeholder="z.B. 140 mg/dl" required>
+        </div>
+        <div class="input-group">
+            <label for="insulin">Gespritzte Einheiten (IE)</label>
+            <input type="number" id="insulin" inputmode="numeric" placeholder="z.B. 8" required>
+        </div>
+        <button id="speichernBtn">Eintrag speichern</button>
+
+        <hr>
+        <h2>Letzte Messungen</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr><th>Zeit</th><th>Zucker</th><th>Insulin</th></tr>
+                </thead>
+                <tbody id="logTabelle">
+                    <tr><td colspan="3" style="text-align:center; color: var(--text-light);">Lade Daten...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="pageStatistik" class="app-page">
+        <h1>📊 Auswertung</h1>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="num" id="statLetzterWert">--</div>
+                <div class="label">Zuletzt gemessener Blutzucker</div>
+            </div>
+            <div class="stat-card">
+                <div class="num" id="statEintraege">--</div>
+                <div class="label">Messungen gesamt</div>
+            </div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="num" id="statMax">--</div>
+                <div class="label">Höchster Wert</div>
+            </div>
+            <div class="stat-card">
+                <div class="num" id="statMin">--</div>
+                <div class="label">Niedrigster Wert</div>
+            </div>
+        </div>
+        <button class="btn-primary" id="zurueckLogbuch1">Zurück zum Tagebuch</button>
+    </div>
+
+    <div id="pageEinstellungen" class="app-page">
+        <h1>⚙️ Einstellungen</h1>
+        <div class="input-group">
+            <label for="spritzUhrzeit">Reguläre Spritz-Uhrzeit</label>
+            <input type="time" id="spritzUhrzeit" value="20:00">
+        </div>
+
+        <label>Wann soll vorab erinnert werden?</label>
+        <div class="checkbox-group">
+            <input type="checkbox" id="warn60" checked>
+            <label for="warn60">1 Stunde vorher (60 Min)</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="warn30" checked>
+            <label for="warn30">30 Minuten vorher</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="warn15" checked>
+            <label for="warn15">15 Minuten vorher</label>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="warn0" checked>
+            <label for="warn0">Punktgenau zur Spritzzeit</label>
+        </div>
+
+        <button id="speichernEinstellungenBtn">Einstellungen speichern</button>
+    </div>
+
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
