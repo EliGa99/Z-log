@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
 import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-database.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
 
 const firebaseConfig = {
@@ -61,18 +61,43 @@ document.getElementById("navEinstellungen").addEventListener("click", () => zeig
 document.getElementById("zurueckLogbuch1").addEventListener("click", () => zeigeSeite("logbuch"));
 
 // ==========================================
-// ANONYME AUTHENTIFIZIERUNG
+// ANONYME AUTHENTIFIZIERUNG (MIT AUTO-REPARATUR)
 // ==========================================
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
     if (user) {
         aktuelleUserUid = user.uid;
-        console.log("Anonym eingeloggt mit UID:", aktuelleUserUid);
-        starteDatenbankVerbindung(aktuelleUserUid);
-        berechtigungFuerPushAnfordern();
+        console.log("Prüfe Account mit UID:", aktuelleUserUid);
+        
+        try {
+            // Test-Schreiben um zu schauen, ob der Account in Firebase gelöscht wurde
+            await set(ref(db, `users/${aktuelleUserUid}/letzter_login`), new Date().toISOString());
+            
+            console.log("Account ist gültig. Starte Verbindung...");
+            starteDatenbankVerbindung(aktuelleUserUid);
+            berechtigungFuerPushAnfordern();
+            
+        } catch (error) {
+            console.warn("⚠️ Alter Account existiert nicht mehr in Firebase! Erstelle neuen...", error);
+            // Alten ungültigen Key aus dem Browser-Speicher werfen
+            await signOut(auth);
+            neuenAnonymenUserErstellen();
+        }
     } else {
-        signInAnonymously(auth).catch(error => console.error("Login Fehler:", error));
+        neuenAnonymenUserErstellen();
     }
 });
+
+// Hilfsfunktion zur sauberen Neuregistrierung
+function neuenAnonymenUserErstellen() {
+    signInAnonymously(auth)
+        .then((result) => {
+            aktuelleUserUid = result.user.uid;
+            console.log("✨ Brandneuer anonymer User erstellt mit UID:", aktuelleUserUid);
+            starteDatenbankVerbindung(aktuelleUserUid);
+            berechtigungFuerPushAnfordern();
+        })
+        .catch(error => console.error("Login Fehler bei Neuerstellung:", error));
+}
 
 function starteDatenbankVerbindung(uid) {
     // 1. EINSTELLUNGEN LADEN & SPEICHERN
@@ -208,15 +233,12 @@ setInterval(updateClockAndCountdown, 1000);
 // ==========================================
 async function berechtigungFuerPushAnfordern() {
     try {
-        // Fragt den Browser/das Handy nach der Erlaubnis
         const permission = await Notification.requestPermission();
         console.log("Berechtigungs-Status:", permission);
 
         if (permission === "granted") {
-            // Registriert die Hintergrund-Datei (firebase-messaging-sw.js)
             const registration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
             
-            // Hol das Token mit deinem echten VAPID-Schlüssel aus der Firebase Console
             const token = await getToken(messaging, { 
                 vapidKey: "BJaHk8YgFDxUQ44zQkywM8uXp2GzWUWoc81ovY7GhAs8UVd5qbqA90xQYaw93pHuj68ZrY8AFrQUWMB3a_cMj9k", 
                 serviceWorkerRegistration: registration 
@@ -224,8 +246,6 @@ async function berechtigungFuerPushAnfordern() {
             
             if (token && aktuelleUserUid) {
                 console.log("Token generiert und wird gespeichert:", token);
-                
-                // Speichert das Token automatisch im Profil des Users in der Datenbank ab
                 await set(ref(db, `users/${aktuelleUserUid}/push_token`), token);
                 console.log("Token erfolgreich in die Firebase-Datenbank hochgeladen!");
             }
