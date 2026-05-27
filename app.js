@@ -17,7 +17,6 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 const messaging = getMessaging(app);
-const registration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
 
 // Globale Variablen
 let globaleSpritzZeit = "20:00";
@@ -75,11 +74,16 @@ onAuthStateChanged(auth, async (user) => {
             
             console.log("Account ist gültig. Starte Verbindung...");
             starteDatenbankVerbindung(aktuelleUserUid);
-            berechtigungFuerPushAnfordern();
+            
+            // Wenn der Browser bereits die Erlaubnis hat, aktualisieren wir den Banner direkt
+            if (Notification.permission === "granted") {
+                const banner = document.getElementById("pushBanner");
+                if (banner) banner.style.display = "none";
+                berechtigungFuerPushAnfordern();
+            }
             
         } catch (error) {
             console.warn("⚠️ Alter Account existiert nicht mehr in Firebase! Erstelle neuen...", error);
-            // Alten ungültigen Key aus dem Browser-Speicher werfen
             await signOut(auth);
             neuenAnonymenUserErstellen();
         }
@@ -95,7 +99,6 @@ function neuenAnonymenUserErstellen() {
             aktuelleUserUid = result.user.uid;
             console.log("✨ Brandneuer anonymer User erstellt mit UID:", aktuelleUserUid);
             starteDatenbankVerbindung(aktuelleUserUid);
-            berechtigungFuerPushAnfordern();
         })
         .catch(error => console.error("Login Fehler bei Neuerstellung:", error));
 }
@@ -156,11 +159,9 @@ function starteDatenbankVerbindung(uid) {
         if (data) {
             const eintraege = Object.keys(data).map(k => data[k]).sort((a,b) => new Date(b.zeitstempel) - new Date(a.zeitstempel));
             
-            // Zuletzt gemessener Wert als Hilfetext (Placeholder) im Input setzen
             const letzterEintrag = eintraege[0];
             if (letzterEintrag) {
                 bzInp.placeholder = `Zuletzt: ${letzterEintrag.blutzucker} mg/dl`;
-                // Wert in der Statistik-Karte anzeigen
                 document.getElementById("statLetzterWert").textContent = `${letzterEintrag.blutzucker} mg/dl`;
             }
 
@@ -169,7 +170,6 @@ function starteDatenbankVerbindung(uid) {
             eintraege.forEach(e => {
                 const d = new Date(e.zeitstempel).toLocaleString("de-DE", { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
                 
-                // CSS-Klasse je nach Gefahrenstufe wählen
                 let zuckerKlasse = "bg-normal";
                 if (e.blutzucker < LIMIT_NIEDRIG) {
                     zuckerKlasse = "bg-niedrig";
@@ -230,8 +230,20 @@ function updateClockAndCountdown() {
 setInterval(updateClockAndCountdown, 1000);
 
 // ==========================================
-// PUSH CONFIG
+// PUSH CONFIG & MANUELLER BUTTON
 // ==========================================
+
+// Event-Listener für den Klick auf den Banner-Button
+document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("pushAktivierenBtn");
+    if (btn) {
+        btn.addEventListener("click", () => {
+            console.log("Button geklickt! Starte Push-Abfrage...");
+            berechtigungFuerPushAnfordern();
+        });
+    }
+});
+
 async function berechtigungFuerPushAnfordern() {
     try {
         const permission = await Notification.requestPermission();
@@ -249,9 +261,15 @@ async function berechtigungFuerPushAnfordern() {
                 console.log("Token generiert und wird gespeichert:", token);
                 await set(ref(db, `users/${aktuelleUserUid}/push_token`), token);
                 console.log("Token erfolgreich in die Firebase-Datenbank hochgeladen!");
+                
+                // Blendet den Banner aus, da es geklappt hat
+                const banner = document.getElementById("pushBanner");
+                if (banner) banner.style.display = "none";
+                
+                alert("🎉 Super! Die Erinnerungen sind jetzt für dieses Handy aktiv.");
             }
-        } else {
-            console.warn("Der Nutzer hat Benachrichtigungen blockiert oder weggedrückt.");
+        } else if (permission === "denied") {
+            alert("⚠️ Benachrichtigungen wurden blockiert. Bitte erlaube sie manuell in den Handy- oder Browser-Einstellungen.");
         }
     } catch (error) { 
         console.error("Fehler beim Push-Setup:", error); 
