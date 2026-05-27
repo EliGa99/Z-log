@@ -21,6 +21,8 @@ const messaging = getMessaging(app);
 // Globale Variablen
 let globaleSpritzZeit = "20:00";
 let aktuelleUserUid = null;
+let isRegistering = false; // Verhindert die Endlosschleife bei gelöschten Usern
+let listenerAktiv = false; // Verhindert doppelte Event-Listener auf den Buttons
 
 // Medizinische Grenzwerte für Warnungen (mg/dl)
 const LIMIT_NIEDRIG = 70;
@@ -61,7 +63,7 @@ document.getElementById("navEinstellungen").addEventListener("click", () => zeig
 document.getElementById("zurueckLogbuch1").addEventListener("click", () => zeigeSeite("logbuch"));
 
 // ==========================================
-// ANONYME AUTHENTIFIZIERUNG (MIT AUTO-REPARATUR)
+// ANONYME AUTHENTIFIZIERUNG (MIT FIX GEGEN ENDLOSSCHLEIFE)
 // ==========================================
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -69,13 +71,12 @@ onAuthStateChanged(auth, async (user) => {
         console.log("Prüfe Account mit UID:", aktuelleUserUid);
         
         try {
-            // Test-Schreiben um zu schauen, ob der Account in Firebase gelöscht wurde
+            // Test-Schreiben um zu schauen, ob der Account in Firebase existiert
             await set(ref(db, `users/${aktuelleUserUid}/letzter_login`), new Date().toISOString());
             
             console.log("Account ist gültig. Starte Verbindung...");
             starteDatenbankVerbindung(aktuelleUserUid);
             
-            // Wenn der Browser bereits die Erlaubnis hat, aktualisieren wir den Banner direkt
             if (Notification.permission === "granted") {
                 const banner = document.getElementById("pushBanner");
                 if (banner) banner.style.display = "none";
@@ -83,12 +84,20 @@ onAuthStateChanged(auth, async (user) => {
             }
             
         } catch (error) {
-            console.warn("⚠️ Alter Account existiert nicht mehr in Firebase! Erstelle neuen...", error);
-            await signOut(auth);
-            neuenAnonymenUserErstellen();
+            console.warn("⚠️ Alter Account existiert nicht mehr in Firebase oder Rechte fehlen!", error);
+            
+            // Nur neu registrieren, wenn wir nicht schon dabei sind
+            if (!isRegistering) {
+                isRegistering = true;
+                await signOut(auth);
+                neuenAnonymenUserErstellen();
+            }
         }
     } else {
-        neuenAnonymenUserErstellen();
+        if (!isRegistering) {
+            isRegistering = true;
+            neuenAnonymenUserErstellen();
+        }
     }
 });
 
@@ -100,26 +109,55 @@ function neuenAnonymenUserErstellen() {
             console.log("✨ Brandneuer anonymer User erstellt mit UID:", aktuelleUserUid);
             starteDatenbankVerbindung(aktuelleUserUid);
         })
-        .catch(error => console.error("Login Fehler bei Neuerstellung:", error));
+        .catch(error => console.error("Login Fehler bei Neuerstellung:", error))
+        .finally(() => {
+            isRegistering = false; // Sperre wieder aufheben
+        });
 }
 
 function starteDatenbankVerbindung(uid) {
-    // 1. EINSTELLUNGEN LADEN & SPEICHERN
-    speichernEinstellungenBtn.addEventListener("click", async () => {
-        try {
-            await set(ref(db, `users/${uid}/profil_einstellungen`), {
-                spritzZeit: eUhrzeit.value,
-                w60: document.getElementById("warn60").checked,
-                w30: document.getElementById("warn30").checked,
-                w15: document.getElementById("warn15").checked,
-                w0: document.getElementById("warn0").checked
-            });
-            globaleSpritzZeit = eUhrzeit.value;
-            alert("Einstellungen erfolgreich gespeichert!");
-            zeigeSeite("logbuch");
-        } catch (e) { console.error(e); }
-    });
+    // Event-Listener nur EINMALIG an die Buttons binden, nicht bei jedem Re-Login
+    if (!listenerAktiv) {
+        listenerAktiv = true;
 
+        // 1. EINSTELLUNGEN SPEICHERN
+        speichernEinstellungenBtn.addEventListener("click", async () => {
+            try {
+                await set(ref(db, `users/${aktuelleUserUid}/profil_einstellungen`), {
+                    spritzZeit: eUhrzeit.value,
+                    w60: document.getElementById("warn60").checked,
+                    w30: document.getElementById("warn30").checked,
+                    w15: document.getElementById("warn15").checked,
+                    w0: document.getElementById("warn0").checked
+                });
+                globaleSpritzZeit = eUhrzeit.value;
+                alert("Einstellungen erfolgreich gespeichert!");
+                zeigeSeite("logbuch");
+            } catch (e) { console.error(e); }
+        });
+
+        // 2. TAGEBUCH-EINTRÄGE SPEICHERN
+        speichernBtn.addEventListener("click", async () => {
+            const bz = parseFloat(bzInp.value);
+            const ins = parseInt(insInp.value);
+            if (!bz || isNaN(ins)) return alert("Bitte beide Felder ausfüllen!");
+
+            if (bz < LIMIT_NIEDRIG) {
+                alert(`⚠️ ACHTUNG UNTERZUCKER! Ihr Wert ist mit ${bz} mg/dl sehr niedrig. Bitte schnell Traubenzucker oder Saft geben!`);
+            } else if (bz > LIMIT_HOCH) {
+                alert(`⚠️ ACHTUNG ÜBERZUCKER! Ihr Wert ist mit ${bz} mg/dl sehr hoch. Bitte Zustand kontrollieren.`);
+            }
+
+            try {
+                const neuesLogRef = push(ref(db, `users/${aktuelleUserUid}/diabetes_logs`));
+                await set(neuesLogRef, { blutzucker: bz, insulin: ins, zeitstempel: new Date().toISOString() });
+                bzInp.value = ""; insInp.value = "";
+            } catch (e) { console.error(e); }
+        });
+    }
+
+    // Die Live-Abfragen (onValue) müssen immer auf die aktuelle UID lauschen
+    // EINSTELLUNGEN LADEN
     onValue(ref(db, `users/${uid}/profil_einstellungen`), (snapshot) => {
         const config = snapshot.val();
         if (config) {
@@ -132,27 +170,7 @@ function starteDatenbankVerbindung(uid) {
         }
     });
 
-    // 2. TAGEBUCH-EINTRÄGE SPEICHERN
-    speichernBtn.addEventListener("click", async () => {
-        const bz = parseFloat(bzInp.value);
-        const ins = parseInt(insInp.value);
-        if (!bz || isNaN(ins)) return alert("Bitte beide Felder ausfüllen!");
-
-        // Sofort-Warnung bei kritischen Werten
-        if (bz < LIMIT_NIEDRIG) {
-            alert(`⚠️ ACHTUNG UNTERZUCKER! Ihr Wert ist mit ${bz} mg/dl sehr niedrig. Bitte schnell Traubenzucker oder Saft geben!`);
-        } else if (bz > LIMIT_HOCH) {
-            alert(`⚠️ ACHTUNG ÜBERZUCKER! Ihr Wert ist mit ${bz} mg/dl sehr hoch. Bitte Zustand kontrollieren.`);
-        }
-
-        try {
-            const neuesLogRef = push(ref(db, `users/${uid}/diabetes_logs`));
-            await set(neuesLogRef, { blutzucker: bz, insulin: ins, zeitstempel: new Date().toISOString() });
-            bzInp.value = ""; insInp.value = "";
-        } catch (e) { console.error(e); }
-    });
-
-    // DATEN LIVE AUSLESEN, ANZEIGEN & WARNUNGEN FARBLICH KENNZEICHNEN
+    // DATEN LIVE AUSLESEN
     onValue(ref(db, `users/${uid}/diabetes_logs`), (snapshot) => {
         logTabelle.innerHTML = "";
         const data = snapshot.val();
@@ -232,8 +250,6 @@ setInterval(updateClockAndCountdown, 1000);
 // ==========================================
 // PUSH CONFIG & MANUELLER BUTTON
 // ==========================================
-
-// Event-Listener für den Klick auf den Banner-Button
 document.addEventListener("DOMContentLoaded", () => {
     const btn = document.getElementById("pushAktivierenBtn");
     if (btn) {
@@ -262,7 +278,6 @@ async function berechtigungFuerPushAnfordern() {
                 await set(ref(db, `users/${aktuelleUserUid}/push_token`), token);
                 console.log("Token erfolgreich in die Firebase-Datenbank hochgeladen!");
                 
-                // Blendet den Banner aus, da es geklappt hat
                 const banner = document.getElementById("pushBanner");
                 if (banner) banner.style.display = "none";
                 
