@@ -206,16 +206,17 @@ setInterval(updateClockAndCountdown, 1000);
 // ==========================================
 // PUSH CONFIG
 // ==========================================
-// ==========================================
-// PUSH CONFIG & AUTOMATISCHES SPEICHERN
-// ==========================================
 async function berechtigungFuerPushAnfordern() {
     try {
+        // Fragt den Browser/das Handy nach der Erlaubnis
         const permission = await Notification.requestPermission();
+        console.log("Berechtigungs-Status:", permission);
+
         if (permission === "granted") {
+            // Registriert die Hintergrund-Datei (firebase-messaging-sw.js)
             const registration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
             
-            // Hol das Token mit deinem VAPID-Schlüssel
+            // Hol das Token mit deinem echten VAPID-Schlüssel aus der Firebase Console
             const token = await getToken(messaging, { 
                 vapidKey: "BJaHk8YgFDxUQ44zQkywM8uXp2GzWUWoc81ovY7GhAs8UVd5qbqA90xQYaw93pHuj68ZrY8AFrQUWMB3a_cMj9k", 
                 serviceWorkerRegistration: registration 
@@ -226,7 +227,12 @@ async function berechtigungFuerPushAnfordern() {
                 
                 // Speichert das Token automatisch im Profil des Users in der Datenbank ab
                 await set(ref(db, `users/${aktuelleUserUid}/push_token`), token);
+                console.log("Token erfolgreich in die Firebase-Datenbank hochgeladen!");
             }
+        } else {
+            console.warn("Der Nutzer hat Benachrichtigungen blockiert oder weggedrückt.");
         }
-    } catch (error) { console.error("Fehler beim Push-Setup:", error); }
+    } catch (error) { 
+        console.error("Fehler beim Push-Setup:", error); 
+    }
 }
