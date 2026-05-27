@@ -17,6 +17,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 const messaging = getMessaging(app);
+const registration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
 
 // Globale Variablen
 let globaleSpritzZeit = "20:00";
